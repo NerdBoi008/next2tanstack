@@ -1,14 +1,19 @@
 {
   "name": "next2tanstack",
   "version": "0.1.0",
-  "description": "Codemod for migrating Next.js to TanStack",
+  "description": "Codemod for migrating Next.js App Router projects to TanStack Start",
   "type": "module",
   "scripts": {
     "test": "pnpm dlx codemod@latest jssg test -l typescript ./scripts/codemod.ts",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "codemod": "npx codemod jssg run ./scripts/codemod.ts --language tsx",
+    "codemod:dry": "npx codemod jssg run ./scripts/codemod.ts --language tsx --dry-run --allow-dirty"
   },
   "devDependencies": {
     "@codemod.com/jssg-types": "^1.3.0",
     "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@types/node": "^25.2.1"
   }
 }

@@ -3,11 +3,14 @@
 version: "1"
 
 nodes:
-  - id: apply-transforms
-    name: Apply AST Transformations
+  - id: migrate-next-to-start
+    name: Migrate Next.js To TanStack Start
     type: automatic
     steps:
-      - name: "Scan typescript files and apply fixes"
+      - name: Apply deterministic TS/TSX transforms
         js-ast-grep:
           js_file: scripts/codemod.ts
-          language: "typescript"
+          language: "tsx"
+          params:
+            routesDirectory: "{{ routesDirectory }}"
+            routes_directory: "{{ routes_directory }}"
