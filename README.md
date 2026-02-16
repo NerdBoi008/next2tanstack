@@ -49,7 +49,7 @@ These are skipped to avoid generating invalid `Link` behavior.
 
 ## Notes
 
-- Migration enable/disable behavior is controlled via `next-to-start.codemod.json` (or workflow params/env overrides where applicable).
+- Migration enable/disable behavior is controlled via `next-to-start.codemod.json`.
 - Metrics include:
   - `migration-impact`: count of automated/manual/blocked items by effort bucket.
   - `migration-time-estimate`: estimated time in `quarter-hours` with:
@@ -88,38 +88,13 @@ Supported config keys:
 
 ## How To Run
 
-Recommended path (most users):
-
-1. Create `next-to-start.codemod.json` in your project root.
-2. Run JSSG directly:
+Run the codemod using the public command:
 
 ```sh
-npx codemod jssg run ./scripts/codemod.ts --language tsx --allow-dirty -v
+npx codemod next2tanstack
 ```
 
-Why this is recommended:
-
-- simpler command
-- no workflow boilerplate required
-- config file keeps behavior reproducible
-
-### Workflow Run (Optional)
-
-Use workflow mode only if you already use Codemod workflows or need to pass params from workflow orchestration.
-
-Step 1: create a Codemod workflow file (using Codemod's official workflow format).
-Step 2: add a JSSG step that runs `./scripts/codemod.ts` with language `tsx`.
-
-Step 3: run workflow:
-
-```sh
-npx codemod workflow run --workflow ./workflow.ts --target ./ --param routesDirectory=app
-```
-
-Supported workflow params for this codemod (`options.params`):
-
-- `routesDirectory`
-- `routes_directory`
+Optional: create `next-to-start.codemod.json` in your project root to control migration behavior.
 
 ### Route Directory Resolution
 
@@ -128,10 +103,9 @@ When file-structure migration is enabled, route entry files are moved/renamed (`
 Resolution order for routes directory:
 
 1. `next-to-start.codemod.json` `routesDirectory`
-2. Workflow params (`options.params.routesDirectory` / `routes_directory`)
-3. Env (`CODEMOD_ROUTES_DIRECTORY`, fallback `ROUTES_DIRECTORY`)
-4. `vite.config.*` `tanstackStart({ router: { routesDirectory: '...' } })`
-5. Default: `routes`
+2. Env (`CODEMOD_ROUTES_DIRECTORY`, fallback `ROUTES_DIRECTORY`)
+3. `vite.config.*` `tanstackStart({ router: { routesDirectory: '...' } })`
+4. Default: `routes`
 
 If your project expects routes to stay in `app` but none of the above are set, codemod defaults to `routes` and you may end up with both:
 
