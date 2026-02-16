@@ -1,6 +1,6 @@
 import type { Edit, Transform } from "codemod:ast-grep";
 import type TSX from "codemod:ast-grep/langs/tsx";
-import * as fsp from "fs/promises";
+import * as fsp from "node:fs/promises";
 import { nextImageTransform } from "../transforms/next-image.ts";
 import { nextLinkTransform } from "../transforms/next-link.ts";
 import { nextServerFunctionTransform } from "../transforms/next-server-actions.ts";
@@ -424,7 +424,9 @@ async function computeTanstackTargetPath(
   const isGroupOnlyBranch =
     relativeRouteSegments.length > 0 &&
     relativeRouteSegments.every((segment) => /^\([^)]+\)$/.test(segment));
-  const isLayoutLikeFile = /^(layout|template)\.(tsx|jsx|ts|js)$/.test(fileBase);
+  const isLayoutLikeFile = /^(layout|template)\.(tsx|jsx|ts|js)$/.test(
+    fileBase,
+  );
 
   // Next.js private folders (_foo), parallel routes (@slot), and layout/template
   // inside route-group segments need manual handling to avoid invalid/conflicting routes.
