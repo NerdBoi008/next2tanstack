@@ -50,6 +50,12 @@ These are skipped to avoid generating invalid `Link` behavior.
 ## Notes
 
 - Migration enable/disable behavior is controlled via `next-to-start.codemod.json` (or workflow params/env overrides where applicable).
+- Metrics include:
+  - `migration-impact`: count of automated/manual/blocked items by effort bucket.
+  - `migration-time-estimate`: estimated time in `quarter-hours` with:
+    - `kind=saved` for automated work.
+    - `kind=remaining` for manual work.
+  - Effort weights: `low=1`, `medium=4`, `high=16` quarter-hours.
 - Confidence-first workflow:
   1. Start with a small migration set via `enabledMigrations` (or keep default full set if your codebase is small).
   2. Run in `--dry-run` and review the diff.

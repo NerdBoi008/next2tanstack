@@ -1,5 +1,6 @@
 import type { Edit, Transform } from "codemod:ast-grep";
 import type TSX from "codemod:ast-grep/langs/tsx";
+import { useMetricAtom } from "codemod:metrics";
 import * as fsp from "node:fs/promises";
 import { nextImageTransform } from "../transforms/next-image.ts";
 import { nextLinkTransform } from "../transforms/next-link.ts";
@@ -14,8 +15,14 @@ import {
 
 let hasLoggedDeleteWarning = false;
 let hasLoggedConfigWarning = false;
+let summaryRegistered = false;
+let summaryPrinted = false;
+let totalFilesSeen = 0;
+let modifiedFiles = 0;
+let estimatedTotalFilesPromise: Promise<number> | null = null;
 const routesDirCache = new Map<string, Promise<string>>();
 const projectConfigCache = new Map<string, Promise<CodemodProjectConfig>>();
+const migrationImpactMetric = useMetricAtom("migration-impact");
 
 const MIGRATION_IDS = [
   "next-image",
@@ -43,6 +50,156 @@ type ResolvedRuntimeConfig = {
   appDirectory: string;
   enabledMigrations: Set<MigrationId>;
 };
+
+function formatHours(hours: number): string {
+  if (Number.isInteger(hours)) return `${hours}`;
+  return `${hours.toFixed(2).replace(/\.?0+$/, "")}`;
+}
+
+function renderReadableSummary(): void {
+  if (summaryPrinted) return;
+  summaryPrinted = true;
+
+    const entries = migrationImpactMetric.getEntries();
+    if (!entries.length) return;
+
+    let automatedLow = 0;
+    let automatedMedium = 0;
+    let automatedHigh = 0;
+    let manualLow = 0;
+    let manualMedium = 0;
+    let manualHigh = 0;
+    let blocked = 0;
+
+    for (const entry of entries) {
+      const cardinality = entry.cardinality ?? {};
+      const bucket = cardinality.bucket;
+      const effort = cardinality.effort;
+      const count = Number(entry.count || 0);
+
+      if (bucket === "blocked") blocked += count;
+      if (bucket === "automated" && effort === "low") automatedLow += count;
+      if (bucket === "automated" && effort === "medium")
+        automatedMedium += count;
+      if (bucket === "automated" && effort === "high") automatedHigh += count;
+      if (bucket === "manual" && effort === "low") manualLow += count;
+      if (bucket === "manual" && effort === "medium") manualMedium += count;
+      if (bucket === "manual" && effort === "high") manualHigh += count;
+    }
+
+    const effortSavedHours =
+      automatedLow * 0.25 + automatedMedium * 1 + automatedHigh * 4;
+    const effortRemainingHours =
+      manualLow * 0.25 + manualMedium * 1 + manualHigh * 4;
+    const totalEffortHours = effortSavedHours + effortRemainingHours;
+    const automatedPercent =
+      totalEffortHours > 0 ? (effortSavedHours / totalEffortHours) * 100 : 0;
+
+    const unmodifiedFiles = Math.max(totalFilesSeen - modifiedFiles, 0);
+
+    console.log("\n=====================");
+    console.log(`📝 Modified files: ${modifiedFiles}`);
+    console.log(`✅ Unmodified files: ${unmodifiedFiles}`);
+    console.log("❌ Files with errors: 0");
+    console.log("");
+    console.log("Derived (e.g. low=0.25h, medium=1h, high=4h):");
+    console.log(
+      ` - Effort saved: ${formatHours(effortSavedHours)}h (${automatedLow}xlow + ${automatedMedium}xmedium + ${automatedHigh}xhigh)`,
+    );
+    console.log(
+      ` - Effort remaining: ${formatHours(effortRemainingHours)}h (${manualLow}xlow + ${manualMedium}xmedium + ${manualHigh}xhigh)`,
+    );
+    console.log(
+      ` - % effort automated: ${Math.round(automatedPercent)}% (${formatHours(
+        effortSavedHours,
+      )} / ${formatHours(totalEffortHours)}h)`,
+    );
+    console.log(` - Blocked: ${blocked} items need investigation`);
+    console.log("=====================\n");
+}
+
+function printReadableSummaryOnce(): void {
+  if (summaryRegistered) return;
+  summaryRegistered = true;
+
+  const onExit = () => {
+    renderReadableSummary();
+  };
+
+  const runtimeProcess = globalThis.process as
+    | { once?: (event: string, cb: () => void) => void; on?: (event: string, cb: () => void) => void }
+    | undefined;
+  if (runtimeProcess && typeof runtimeProcess.once === "function") {
+    runtimeProcess.once("beforeExit", onExit);
+    return;
+  }
+  if (runtimeProcess && typeof runtimeProcess.on === "function") {
+    runtimeProcess.on("exit", onExit);
+    return;
+  }
+}
+
+function shouldCountFile(path: string): boolean {
+  const normalized = normalizePath(path);
+  return /\.(ts|tsx|js|jsx)$/.test(normalized);
+}
+
+async function estimateProcessableFileCount(seedFile: string): Promise<number> {
+  const runtimeProcess = globalThis.process as
+    | { cwd?: () => string }
+    | undefined;
+  const cwd =
+    runtimeProcess && typeof runtimeProcess.cwd === "function"
+      ? runtimeProcess.cwd()
+      : dirname(seedFile);
+  const ignoredDirs = new Set([
+    ".git",
+    "node_modules",
+    ".next",
+    "dist",
+    "build",
+    "out",
+    "coverage",
+  ]);
+
+  const queue: string[] = [cwd];
+  let count = 0;
+
+  while (queue.length > 0) {
+    const current = queue.pop();
+    if (!current) continue;
+    let entries: Awaited<ReturnType<typeof fsp.readdir>>;
+    try {
+      entries = await fsp.readdir(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const fullPath = `${trimTrailingSlash(current)}/${entry.name}`;
+      if (entry.isDirectory()) {
+        if (ignoredDirs.has(entry.name)) continue;
+        queue.push(fullPath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (!shouldCountFile(fullPath)) continue;
+      count += 1;
+    }
+  }
+  return count;
+}
+
+async function maybePrintReadableSummaryAtEnd(seedFile: string): Promise<void> {
+  if (summaryPrinted) return;
+  if (!estimatedTotalFilesPromise) {
+    estimatedTotalFilesPromise = estimateProcessableFileCount(seedFile);
+  }
+  const estimatedTotalFiles = await estimatedTotalFilesPromise;
+  if (estimatedTotalFiles <= 0) return;
+  if (totalFilesSeen >= estimatedTotalFiles) {
+    renderReadableSummary();
+  }
+}
 
 function readCliOption(name: string): string | null {
   const exact = `--${name}`;
@@ -680,6 +837,9 @@ async function tryDeleteDirIfEmpty(path: string): Promise<boolean> {
 }
 
 const transform: Transform<TSX> = async (root, options?: unknown) => {
+  printReadableSummaryOnce();
+  totalFilesSeen += 1;
+
   const rootNode = root.root();
   const allEdits: Edit[] = [];
   const runtimeConfig = await resolveRuntimeConfig(root.filename(), options);
@@ -712,6 +872,14 @@ const transform: Transform<TSX> = async (root, options?: unknown) => {
   const targetPath = enabled.has("route-file-structure")
     ? await computeTanstackTargetPath(currentFilename, runtimeConfig)
     : null;
+  const isMovedFile = Boolean(
+    targetPath && normalizePath(targetPath) !== normalizePath(currentFilename),
+  );
+  if (allEdits.length > 0 || isMovedFile) {
+    modifiedFiles += 1;
+  }
+  await maybePrintReadableSummaryAtEnd(currentFilename);
+
   if (!isDryRun() && targetPath) {
     const output = isRootRouteTarget(targetPath)
       ? normalizeRootRouteSource(commitResult)

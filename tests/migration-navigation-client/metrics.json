@@ -14,5 +14,21 @@
       },
       "count": 1
     }
+  ],
+  "migration-time-estimate": [
+    {
+      "cardinality": {
+        "kind": "saved",
+        "unit": "quarter-hours"
+      },
+      "count": 1
+    },
+    {
+      "cardinality": {
+        "kind": "remaining",
+        "unit": "quarter-hours"
+      },
+      "count": 8
+    }
   ]
 }

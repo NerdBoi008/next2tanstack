@@ -1,8 +1,6 @@
 import type { Edit } from "codemod:ast-grep";
 import type { SubTranform } from "../types/index.js";
-import { useMetricAtom } from "codemod:metrics";
-
-const migrationMetric = useMetricAtom("migration-impact");
+import { recordMigrationImpact } from "./metrics.ts";
 
 export const nextUseClientDirectiveTransform: SubTranform = async (root) => {
   const rootNode = root.root();
@@ -26,7 +24,7 @@ export const nextUseClientDirectiveTransform: SubTranform = async (root) => {
   if (useClientDirectives.length === 0) return null;
 
   for (const directive of useClientDirectives) {
-    migrationMetric.increment({ bucket: "automated", effort: "low" });
+    recordMigrationImpact({ bucket: "automated", effort: "low" });
     edits.push(directive.replace(""));
   }
 

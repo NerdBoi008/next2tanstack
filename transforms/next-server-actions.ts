@@ -1,8 +1,6 @@
 import type { Edit } from "codemod:ast-grep";
 import type { SubTranform } from "../types/index.js";
-import { useMetricAtom } from "codemod:metrics";
-
-const migrationMetric = useMetricAtom("migration-impact");
+import { recordMigrationImpact } from "./metrics.ts";
 
 export const nextServerFunctionTransform: SubTranform = async (root) => {
   const rootNode = root.root();
@@ -86,7 +84,7 @@ export const nextServerFunctionTransform: SubTranform = async (root) => {
       func.parent()?.kind() === "export_statement" ? func.parent() : func;
     const isExport = targetNode !== func;
     const serverFnCode = buildServerFnCode(name, params, body, isExport);
-    migrationMetric.increment({ bucket: "automated", effort: "medium" });
+    recordMigrationImpact({ bucket: "automated", effort: "medium" });
     if (isTopLevel(targetNode)) {
       replaceNode(targetNode, serverFnCode);
     } else {
@@ -152,7 +150,7 @@ export const nextServerFunctionTransform: SubTranform = async (root) => {
     const isExport =
       targetNode !== func && (targetNode?.text().startsWith("export") ?? false);
     const serverFnCode = buildServerFnCode(name, params, body, isExport);
-    migrationMetric.increment({ bucket: "automated", effort: "medium" });
+    recordMigrationImpact({ bucket: "automated", effort: "medium" });
     if (isTopLevel(targetNode)) {
       replaceNode(targetNode, serverFnCode);
     } else {
@@ -209,7 +207,7 @@ export const nextServerFunctionTransform: SubTranform = async (root) => {
         continue;
       }
       const serverFnCode = buildServerFnCode(name, params, body, true);
-      migrationMetric.increment({ bucket: "automated", effort: "medium" });
+      recordMigrationImpact({ bucket: "automated", effort: "medium" });
       replaceNode(targetNode, serverFnCode);
       needsCreateServerFnImport = true;
       if (!firstServerFnTarget && isTopLevel(targetNode)) {
@@ -286,7 +284,7 @@ export const nextServerFunctionTransform: SubTranform = async (root) => {
             .map((c: any) => c.text())
             .join("");
 
-          migrationMetric.increment({ bucket: "automated", effort: "medium" });
+          recordMigrationImpact({ bucket: "automated", effort: "medium" });
           // Replace with onSubmit handler
           edits.push(
             form.replace(
@@ -568,7 +566,7 @@ function buildServerFnCode(
     (body.match(/revalidateTag\s*\(/g)?.length ?? 0) +
     (body.match(/(?:await\s+)?cookies\s*\(/g)?.length ?? 0);
   if (manualTodoCount > 0) {
-    migrationMetric.increment(
+    recordMigrationImpact(
       { bucket: "manual", effort: "medium" },
       manualTodoCount,
     );

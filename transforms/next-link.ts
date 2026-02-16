@@ -1,8 +1,6 @@
 import type { Edit } from "codemod:ast-grep";
 import type { SubTranform } from "../types/index.js";
-import { useMetricAtom } from "codemod:metrics";
-
-const migrationMetric = useMetricAtom("migration-impact");
+import { recordMigrationImpact } from "./metrics.ts";
 
 export const nextLinkTransform: SubTranform = async (root) => {
   const rootNode = root.root();
@@ -25,7 +23,7 @@ export const nextLinkTransform: SubTranform = async (root) => {
 
   const blockers = detectMigrationBlockers(rootNode);
   if (blockers.length) {
-    migrationMetric.increment({ bucket: "blocked" });
+    recordMigrationImpact({ bucket: "blocked" });
     console.warn(
       `[next-link] Skipping ${root.filename()} (${blockers.join(", ")})`,
     );
@@ -164,7 +162,7 @@ export const nextLinkTransform: SubTranform = async (root) => {
       .map((c) => c.text())
       .join("");
 
-    migrationMetric.increment({ bucket: "automated", effort: "low" });
+    recordMigrationImpact({ bucket: "automated", effort: "low" });
     if (isExternal) {
       edits.push(
         linkNode.replace(

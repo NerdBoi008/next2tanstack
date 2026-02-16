@@ -1,8 +1,6 @@
 import type { Edit } from "codemod:ast-grep";
 import type { SubTranform } from "../types/index.js";
-import { useMetricAtom } from "codemod:metrics";
-
-const migrationMetric = useMetricAtom("migration-impact");
+import { recordMigrationImpact } from "./metrics.ts";
 
 type ImportBinding = {
   imported: string;
@@ -26,7 +24,7 @@ export const nextManualMigrationTodoTransform: SubTranform = async (root) => {
     if (!anchor) return;
     const todo = `${TODO_PREFIX} ${message}`;
     if (anchor.text().includes(todo)) return;
-    migrationMetric.increment({ bucket: "manual", effort });
+    recordMigrationImpact({ bucket: "manual", effort });
     const existing = lineComments.get(anchor) ?? new Set<string>();
     existing.add(todo);
     lineComments.set(anchor, existing);
@@ -35,7 +33,7 @@ export const nextManualMigrationTodoTransform: SubTranform = async (root) => {
   const queueTopTodo = (message: string, effort: Effort) => {
     const todo = `${TODO_PREFIX} ${message}`;
     if (!source.includes(todo) && !topLevelTodos.includes(todo)) {
-      migrationMetric.increment({ bucket: "manual", effort });
+      recordMigrationImpact({ bucket: "manual", effort });
       topLevelTodos.push(todo);
     }
   };
