@@ -26,6 +26,17 @@ jobs:
             exit 1
           fi
 
+      - name: Validate packed codemod.yaml (LF only)
+        shell: bash
+        run: |
+          tgz="$(npm pack --silent | tail -n 1)"
+          tar -xOf "$tgz" package/codemod.yaml | grep -q $'\r' && {
+            echo "Packed codemod.yaml contains CRLF/control characters"
+            rm -f "$tgz"
+            exit 1
+          }
+          rm -f "$tgz"
+
       - name: Login to Codemod Registry
         run: npx codemod login --api-key ${{ secrets.CODEMOD_API_KEY }}
 
