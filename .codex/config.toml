@@ -1,0 +1,26 @@
+[mcp_servers.tanstack]
+type = "stdio"
+command = "npx"
+args = ["@tanstack/cli", "mcp"]
+startup_timeout_ms = 30000
+
+[mcp_servers.tanstack.auth]
+method = "none"
+
+[mcp_servers.nextjs]
+type = "stdio"
+command = "npx"
+args = ["-y", "next-devtools-mcp@latest"]
+startup_timeout_ms = 30000
+
+[mcp_servers.nextjs.auth]
+method = "none"
+
+[mcp_servers.codemod]
+type = "stdio"
+command = "npx"
+args = ["-y", "codemod@latest", "mcp"]
+startup_timeout_ms = 60000
+
+[mcp_servers.codemod.auth]
+method = "none"
