@@ -13,4 +13,3 @@ nodes:
           language: "tsx"
           params:
             routesDirectory: "{{ routesDirectory }}"
-            routes_directory: "{{ routes_directory }}"
