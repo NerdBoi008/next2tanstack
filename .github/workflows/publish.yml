@@ -5,6 +5,10 @@ on:
       - "v*"
   workflow_dispatch:
 
+permissions:
+  id-token: write  
+  contents: read
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -37,8 +41,10 @@ jobs:
           }
           rm -f "$tgz"
 
-      - name: Login to Codemod Registry
-        run: npx codemod login --api-key ${{ secrets.CODEMOD_API_KEY }}
+      - uses: codemod/publish-action@v1
 
-      - name: Publish codemod
-        run: npx codemod publish
+      # - name: Login to Codemod Registry
+      #   run: npx codemod login --api-key ${{ secrets.CODEMOD_API_KEY }}
+      #
+      # - name: Publish codemod
+      #   run: npx codemod publish
