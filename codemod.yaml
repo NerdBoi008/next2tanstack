@@ -1,7 +1,7 @@
 schema_version: "1.0"
 
 name: "next2tanstack"
-version: "0.1.1"
+version: "0.1.2"
 description: "Codemod for migrating Next.js to TanStack"
 author: "nerdboi008 <mail.nerdboi@gmail.com>"
 license: "MIT"
@@ -9,12 +9,19 @@ workflow: "workflow.yaml"
 category: "migration"
 
 targets:
-  languages: [ "typescript" ]
+  languages: 
+    - "typescript"
 
-keywords: [ "transformation", "migration", "nextjs", "tanstack", "router" ]
+keywords: 
+  - "transformation"
+  - "migration"
+  - "nextjs"
+  - "tanstack" 
+  - "router"
 
 regitry:
   access: "public"
   visibility: "public"
 
-capabilities: [ "fs" ]
+capabilities:
+  - fs
