@@ -162,6 +162,9 @@ async function estimateProcessableFileCount(seedFile: string): Promise<number> {
     "build",
     "out",
     "coverage",
+    ".agents",
+    ".codex",
+    ".github"
   ]);
 
   const queue: string[] = [cwd];
@@ -282,23 +285,174 @@ function getRoutesDirectoryOverride(): string | null {
 function getRoutesDirectoryOverrideFromOptions(
   options: unknown,
 ): string | null {
-  if (!options || typeof options !== "object") return null;
-  const params = (options as { params?: Record<string, unknown> }).params;
-  if (!params || typeof params !== "object") return null;
+  const workflowConfig = getWorkflowConfigOverridesFromOptions(options);
+  if (!workflowConfig.routesDirectory) return null;
+  const normalized = normalizeRoutesDirectory(workflowConfig.routesDirectory);
+  return normalized || null;
+}
 
-  const candidateKeys = [
+function parseBooleanLike(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+  return null;
+}
+
+function parseStringArrayLike(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    const list = value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return list.length > 0 ? list : [];
+  }
+
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (!Array.isArray(parsed)) return [];
+      const list = parsed
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      return list;
+    } catch {
+      return [];
+    }
+  }
+
+  return trimmed
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseMigrationMapLike(
+  value: unknown,
+): Record<string, boolean> | undefined {
+  const toBooleanMap = (obj: Record<string, unknown>): Record<string, boolean> => {
+    const output: Record<string, boolean> = {};
+    for (const [key, raw] of Object.entries(obj)) {
+      const boolValue = parseBooleanLike(raw);
+      if (boolValue === null) continue;
+      output[key] = boolValue;
+    }
+    return output;
+  };
+
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return toBooleanMap(value as Record<string, unknown>);
+  }
+
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return {};
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    return toBooleanMap(parsed as Record<string, unknown>);
+  } catch {
+    return {};
+  }
+}
+
+function pickParam(
+  params: Record<string, unknown>,
+  keys: string[],
+): unknown {
+  for (const key of keys) {
+    if (key in params) return params[key];
+  }
+  return undefined;
+}
+
+function getWorkflowConfigOverridesFromOptions(
+  options: unknown,
+): CodemodProjectConfig {
+  if (!options || typeof options !== "object") return {};
+  const params = (options as { params?: Record<string, unknown> }).params;
+  if (!params || typeof params !== "object") return {};
+
+  const routesDirectoryRaw = pickParam(params, [
     "routesDirectory",
     "routes_directory",
     "routes-dir",
     "routesDir",
-  ];
-  for (const key of candidateKeys) {
-    const raw = params[key];
-    if (typeof raw !== "string") continue;
-    const normalized = normalizeRoutesDirectory(raw);
-    if (normalized) return normalized;
+  ]);
+  const appDirectoryRaw = pickParam(params, [
+    "appDirectory",
+    "app_directory",
+    "app-dir",
+    "appDir",
+  ]);
+  const enabledMigrationsRaw = pickParam(params, [
+    "enabledMigrations",
+    "enabled_migrations",
+    "enabled-migrations",
+  ]);
+  const disabledMigrationsRaw = pickParam(params, [
+    "disabledMigrations",
+    "disabled_migrations",
+    "disabled-migrations",
+  ]);
+  const migrationsRaw = pickParam(params, ["migrations"]);
+
+  const routesDirectory =
+    typeof routesDirectoryRaw === "string"
+      ? normalizeRoutesDirectory(routesDirectoryRaw) || undefined
+      : undefined;
+  const appDirectory =
+    typeof appDirectoryRaw === "string"
+      ? normalizeAppDirectory(appDirectoryRaw) || undefined
+      : undefined;
+  const enabledMigrations = parseStringArrayLike(enabledMigrationsRaw);
+  const disabledMigrations = parseStringArrayLike(disabledMigrationsRaw);
+  const migrations = parseMigrationMapLike(migrationsRaw);
+
+  const output: CodemodProjectConfig = {};
+  if (routesDirectory) output.routesDirectory = routesDirectory;
+  if (appDirectory) output.appDirectory = appDirectory;
+  if (enabledMigrations !== undefined) output.enabledMigrations = enabledMigrations;
+  if (disabledMigrations !== undefined) output.disabledMigrations = disabledMigrations;
+  if (migrations !== undefined) output.migrations = migrations;
+  return output;
+}
+
+function mergeProjectConfigs(
+  base: CodemodProjectConfig,
+  overrides: CodemodProjectConfig,
+): CodemodProjectConfig {
+  const merged: CodemodProjectConfig = { ...base };
+
+  if (overrides.routesDirectory !== undefined) {
+    merged.routesDirectory = overrides.routesDirectory;
   }
-  return null;
+  if (overrides.appDirectory !== undefined) {
+    merged.appDirectory = overrides.appDirectory;
+  }
+  if (overrides.enabledMigrations !== undefined) {
+    merged.enabledMigrations = overrides.enabledMigrations;
+  }
+  if (overrides.disabledMigrations !== undefined) {
+    merged.disabledMigrations = overrides.disabledMigrations;
+  }
+  if (overrides.migrations !== undefined) {
+    merged.migrations = {
+      ...(base.migrations || {}),
+      ...overrides.migrations,
+    };
+  }
+
+  return merged;
 }
 
 function isDryRun(): boolean {
@@ -539,15 +693,17 @@ async function resolveRuntimeConfig(
   options?: unknown,
 ): Promise<ResolvedRuntimeConfig> {
   const projectConfig = await readProjectConfig(filename);
+  const workflowConfig = getWorkflowConfigOverridesFromOptions(options);
+  const effectiveConfig = mergeProjectConfigs(projectConfig, workflowConfig);
   const optionsOverride = getRoutesDirectoryOverrideFromOptions(options);
   const routesDirectory = await getConfiguredRoutesDirectory(
     filename,
-    projectConfig,
+    effectiveConfig,
     optionsOverride,
   );
   const appDirectory =
-    normalizeAppDirectory(projectConfig.appDirectory || "app") || "app";
-  const enabledMigrations = resolveEnabledMigrations(projectConfig);
+    normalizeAppDirectory(effectiveConfig.appDirectory || "app") || "app";
+  const enabledMigrations = resolveEnabledMigrations(effectiveConfig);
   return { routesDirectory, appDirectory, enabledMigrations };
 }
 

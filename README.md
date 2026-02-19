@@ -96,16 +96,46 @@ npx codemod next2tanstack
 
 Optional: create `next-to-start.codemod.json` in your project root to control migration behavior.
 
+### Workflow Support (`workflow.yaml`)
+
+This codemod also ships a multi-node workflow with runtime params:
+
+- `deterministic-migration`: runs `scripts/codemod.ts` across `**/*.{ts,tsx,js,jsx}` (with common build/cache dirs excluded).
+- `ai-followups` (optional): enabled when `enableAiFixups == "true"`.
+- `post-migration` (optional): runs Prettier when `runPrettier == "true"`.
+
+Workflow params supported by the script:
+
+- `routesDirectory` (string)
+- `appDirectory` (string)
+- `enabledMigrations` (comma-separated string or JSON array string)
+- `disabledMigrations` (comma-separated string or JSON array string)
+- `migrations` (JSON object string, e.g. `{"next-image": false, "api-routes": true}`)
+
+Example workflow params:
+
+```yaml
+params:
+  routesDirectory: "app/routes"
+  appDirectory: "app"
+  enabledMigrations: "next-link,route-file-structure,api-routes"
+  migrations: '{"manual-migration-todos": true}'
+  enableAiFixups: "true"
+  runPrettier: "true"
+```
+
 ### Route Directory Resolution
 
 When file-structure migration is enabled, route entry files are moved/renamed (`page.tsx` -> `index.tsx`, `layout.tsx` -> `_layout.tsx` or `__root.tsx`, etc.).
 
 Resolution order for routes directory:
 
-1. `next-to-start.codemod.json` `routesDirectory`
-2. Env (`CODEMOD_ROUTES_DIRECTORY`, fallback `ROUTES_DIRECTORY`)
+1. Workflow/config `routesDirectory` (includes `next-to-start.codemod.json` and workflow params)
+2. Env/CLI override (`--routes-directory`, `CODEMOD_ROUTES_DIRECTORY`, fallback `ROUTES_DIRECTORY`)
 3. `vite.config.*` `tanstackStart({ router: { routesDirectory: '...' } })`
 4. Default: `routes`
+
+Note: workflow params are merged over file config for `appDirectory`, migration toggles, and `routesDirectory`.
 
 If your project expects routes to stay in `app` but none of the above are set, codemod defaults to `routes` and you may end up with both:
 

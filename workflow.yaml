@@ -2,14 +2,102 @@
 
 version: "1"
 
+params:
+  schema:
+    routesDirectory:
+      name: "Routes Directory"
+      description: "Optional routes directory override (script also reads next-to-start.codemod.json and vite config)."
+      type: string
+      default: "routes"
+    appDirectory:
+      name: "App Directory"
+      description: "Override Next.js app directory (equivalent to next-to-start.codemod.json appDirectory)."
+      type: string
+      default: "app"
+    enabledMigrations:
+      name: "Enabled Migrations"
+      description: "Comma-separated list or JSON array; works like next-to-start.codemod.json enabledMigrations."
+      type: string
+      default: ""
+    disabledMigrations:
+      name: "Disabled Migrations"
+      description: "Comma-separated list or JSON array; works like next-to-start.codemod.json disabledMigrations."
+      type: string
+      default: ""
+    migrations:
+      name: "Migrations Map"
+      description: "JSON object map for per-ID toggles; works like next-to-start.codemod.json migrations."
+      type: string
+      default: "{}"
+    enableAiFixups:
+      name: "AI Fixups"
+      description: "Run an optional AI pass for unresolved framework-specific edge cases."
+      type: string
+      default: "false"
+    runPrettier:
+      name: "Run Prettier"
+      description: "Run Prettier after all migrations complete."
+      type: string
+      default: "false"
+
 nodes:
-  - id: migrate-next-to-start
-    name: Migrate Next.js To TanStack Start
+  - id: deterministic-migration
+    name: Deterministic Next.js -> TanStack migration
     type: automatic
     steps:
-      - name: Apply deterministic TS/TSX transforms
+      - name: Apply TS/JS transforms
         js-ast-grep:
-          js_file: scripts/codemod.ts
+          js_file: "scripts/codemod.ts"
           language: "tsx"
-          params:
-            routesDirectory: "{{ routesDirectory }}"
+          include:
+            - "**/*.{ts,tsx,js,jsx}"
+          exclude:
+            - "**/*.d.ts"
+            - "**/node_modules/**"
+            - "**/.next/**"
+            - "**/dist/**"
+            - "**/build/**"
+            - "**/coverage/**"
+            - "**/.git/**"
+            - "**/.agents/**"
+            - "**/.github/**"
+            - "**/.*/**"
+
+  - id: ai-followups
+    name: AI follow-up migration fixes
+    type: automatic
+    depends_on:
+      - deterministic-migration
+    steps:
+      - name: Resolve leftover Next.js patterns
+        if: params.enableAiFixups == "true"
+        ai:
+          model: "gpt-4o"
+          max_steps: 40
+          prompt: |
+            You are finishing a Next.js -> TanStack Start migration.
+
+            Goals:
+            1) Find obvious remaining imports/usages of next/navigation, next/headers, next/cache, next/og, and Next.js-only route conventions.
+            2) Apply only low-risk transformations that preserve runtime behavior.
+            3) For ambiguous or high-risk cases, add concise TODO comments instead of forcing a rewrite.
+
+            Constraints:
+            - Keep edits minimal and deterministic.
+            - Do not invent APIs.
+            - Preserve existing types and exports.
+            - Do not remove code unless replacement is clearly correct.
+
+  - id: post-migration
+    name: Post-migration cleanup
+    type: automatic
+    depends_on:
+      - deterministic-migration
+      - ai-followups
+    steps:
+      - name: Format files with Prettier (optional)
+        if: params.runPrettier == "true"
+        run: |
+          if command -v npx >/dev/null 2>&1; then
+            npx prettier --write "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}" || true
+          fi
